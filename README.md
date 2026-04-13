@@ -67,6 +67,30 @@ uv run ruff check .
 uv run pytest
 ```
 
+## Bash Shortcuts
+
+You can source helper functions from [scripts/bashrc.sh](scripts/bashrc.sh):
+
+```bash
+source /work/Projects/Personal/word-vault/scripts/bashrc.sh
+```
+
+Or add this line to your `~/.bashrc`:
+
+```bash
+source /work/Projects/Personal/word-vault/scripts/bashrc.sh
+```
+
+Then use shortcuts such as:
+
+```bash
+word-add apple --sentence "I ate an apple after lunch."
+word-list
+word-show apple
+word-review --count 5
+word-delete apple
+```
+
 ## Docs
 
 - `docs/overview.md`
