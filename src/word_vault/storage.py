@@ -78,9 +78,15 @@ class WordRepository:
             return None
         return self._row_to_entry(row)
 
-    def list_words(self) -> list[WordEntry]:
+    def list_words(self, pattern: str | None = None) -> list[WordEntry]:
         with self._connect() as conn:
-            rows = conn.execute("SELECT * FROM words ORDER BY word ASC").fetchall()
+            if pattern:
+                rows = conn.execute(
+                    "SELECT * FROM words WHERE word GLOB ? ORDER BY word ASC",
+                    (pattern.lower(),),
+                ).fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM words ORDER BY word ASC").fetchall()
         return [self._row_to_entry(row) for row in rows]
 
     def delete_word(self, word: str) -> bool:

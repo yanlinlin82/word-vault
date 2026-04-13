@@ -66,6 +66,26 @@ def test_show_not_found(tmp_path: Path, monkeypatch) -> None:
     assert result.exit_code == 1
 
 
+def test_list_supports_wildcard_pattern(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "list.db"
+    monkeypatch.setenv("WORD_VAULT_DB_PATH", str(db_path))
+    fake_client = FakeClient()
+    runner = CliRunner()
+
+    monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: fake_client)
+
+    assert runner.invoke(cli.app, ["add", "apple"]).exit_code == 0
+    assert runner.invoke(cli.app, ["add", "application"]).exit_code == 0
+    assert runner.invoke(cli.app, ["add", "banana"]).exit_code == 0
+
+    result = runner.invoke(cli.app, ["list", "app*"])
+
+    assert result.exit_code == 0
+    assert "- apple:" in result.stdout
+    assert "- application:" in result.stdout
+    assert "- banana:" not in result.stdout
+
+
 def test_root_no_args_shows_help() -> None:
     runner = CliRunner()
     result = runner.invoke(cli.app, [])

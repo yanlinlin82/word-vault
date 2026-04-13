@@ -30,10 +30,16 @@ uv run word-vault show apple
 
 ## list
 
-List all words.
+List all words, or filter them with shell-style wildcards.
+
+- `*` matches any sequence of characters.
+- `?` matches a single character.
+- Quote the pattern in your shell to avoid local shell expansion.
 
 ```bash
 uv run word-vault list
+uv run word-vault list 'app*'
+uv run word-vault list 'b?nana'
 ```
 
 ## review

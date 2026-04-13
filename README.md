@@ -50,12 +50,14 @@ uv run word-vault add apple --sentence "I ate an apple after lunch."
 uv run word-vault add apple --refresh
 uv run word-vault show apple
 uv run word-vault list
+uv run word-vault list 'app*'
 uv run word-vault review --count 5
 uv run word-vault delete apple
 ```
 
 `add` uses cache-first behavior by default to avoid repeated LLM calls.
 Use `--refresh` only when you want to fetch a new result from DeepSeek.
+`list` supports `*` and `?` wildcards; quote patterns in the shell.
 
 ## Development Commands
 

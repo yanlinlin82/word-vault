@@ -105,11 +105,11 @@ def show(word: str) -> None:
 
 
 @app.command("list")
-def list_words() -> None:
-    """List all stored words."""
+def list_words(pattern: str | None = None) -> None:
+    """List all stored words, optionally filtered by wildcard pattern."""
     settings = get_settings()
     repo = get_repo(settings)
-    items = repo.list_words()
+    items = repo.list_words(pattern=pattern)
 
     if not items:
         typer.echo("No words found.")
