@@ -64,3 +64,21 @@ def test_show_not_found(tmp_path: Path, monkeypatch) -> None:
 
     result = runner.invoke(cli.app, ["show", "missing"])
     assert result.exit_code == 1
+
+
+def test_root_no_args_shows_help() -> None:
+    runner = CliRunner()
+    result = runner.invoke(cli.app, [])
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.stdout
+    assert "Word Vault CLI" in result.stdout
+
+
+def test_root_short_h_matches_help() -> None:
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["-h"])
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.stdout
+    assert "Word Vault CLI" in result.stdout

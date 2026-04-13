@@ -8,7 +8,17 @@ from .config import Settings, get_settings
 from .services.llm_client import DeepSeekClient
 from .storage import WordRepository
 
-app = typer.Typer(help="Word Vault CLI")
+app = typer.Typer(
+    help="Word Vault CLI",
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+
+
+@app.callback(invoke_without_command=True)
+def root(ctx: typer.Context) -> None:
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit(code=0)
 
 
 def get_repo(settings: Settings) -> WordRepository:
