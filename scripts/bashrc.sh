@@ -9,6 +9,14 @@ _word_vault_run() {
     )
 }
 
+_word_vault_complete_word_show() {
+    local current words
+
+    current="${COMP_WORDS[COMP_CWORD]}"
+    words="$(_word_vault_run list "${current}*" 2>/dev/null | awk -F': ' '/^- / {print substr($1, 3)}')"
+    COMPREPLY=( $(compgen -W "$words" -- "$current") )
+}
+
 word-add() {
     _word_vault_run add "$@"
 }
@@ -28,3 +36,5 @@ word-review() {
 word-delete() {
     _word_vault_run delete "$@"
 }
+
+complete -F _word_vault_complete_word_show word-show

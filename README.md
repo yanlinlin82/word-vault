@@ -93,6 +93,8 @@ word-review --count 5
 word-delete apple
 ```
 
+After sourcing [scripts/bashrc.sh](scripts/bashrc.sh), `word-show` also supports Bash Tab completion based on stored words.
+
 ## Docs
 
 - `docs/overview.md`
