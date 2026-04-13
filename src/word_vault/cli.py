@@ -105,7 +105,12 @@ def show(word: str) -> None:
 
 
 @app.command("list")
-def list_words(pattern: str | None = None) -> None:
+def list_words(
+    pattern: Annotated[
+        str | None,
+        typer.Argument(help="Optional wildcard pattern using * and ?"),
+    ] = None,
+) -> None:
     """List all stored words, optionally filtered by wildcard pattern."""
     settings = get_settings()
     repo = get_repo(settings)

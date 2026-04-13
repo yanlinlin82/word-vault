@@ -85,6 +85,12 @@ def test_list_supports_wildcard_pattern(tmp_path: Path, monkeypatch) -> None:
     assert "- application:" in result.stdout
     assert "- banana:" not in result.stdout
 
+    second_result = runner.invoke(cli.app, ["list", "b*"])
+
+    assert second_result.exit_code == 0
+    assert "- banana:" in second_result.stdout
+    assert "- apple:" not in second_result.stdout
+
 
 def test_root_no_args_shows_help() -> None:
     runner = CliRunner()
