@@ -10,10 +10,14 @@ uv run word-vault init-db
 
 ## add
 
-Add or update a word via DeepSeek API.
+Add a word using cache-first behavior.
+
+- If the word already exists locally, the command returns cached data behavior and does not call DeepSeek again.
+- Use `--refresh` to force a new DeepSeek call and update the stored fields.
 
 ```bash
 uv run word-vault add apple --sentence "I ate an apple after lunch."
+uv run word-vault add apple --refresh
 ```
 
 ## show

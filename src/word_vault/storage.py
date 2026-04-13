@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import datetime
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 
 from .models import WordEntry
-
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS words (
@@ -52,7 +51,7 @@ class WordRepository:
         pattern: str,
         source_sentence: str,
     ) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.datetime.now(datetime.UTC).isoformat()
         with self._connect() as conn:
             conn.execute(
                 """
@@ -108,7 +107,7 @@ class WordRepository:
         return [self._row_to_entry(row) for row in rows]
 
     def mark_reviewed(self, word: str) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.datetime.now(datetime.UTC).isoformat()
         with self._connect() as conn:
             conn.execute(
                 """
@@ -129,10 +128,10 @@ class WordRepository:
             usage=row["usage"],
             pattern=row["pattern"],
             source_sentence=row["source_sentence"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
+            created_at=datetime.datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.datetime.fromisoformat(row["updated_at"]),
             last_reviewed_at=(
-                datetime.fromisoformat(row["last_reviewed_at"])
+                datetime.datetime.fromisoformat(row["last_reviewed_at"])
                 if row["last_reviewed_at"]
                 else None
             ),

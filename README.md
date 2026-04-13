@@ -18,7 +18,6 @@ word-vault/
 ├── src/
 │   └── word_vault/
 ├── tests/
-├── run.py
 └── pyproject.toml
 ```
 
@@ -41,28 +40,31 @@ word-vault/
 4. Initialize database schema:
 
     ```bash
-    uv run run.py init
+    uv run word-vault init-db
     ```
 
 ## Basic Commands
 
 ```bash
 uv run word-vault add apple --sentence "I ate an apple after lunch."
+uv run word-vault add apple --refresh
 uv run word-vault show apple
 uv run word-vault list
 uv run word-vault review --count 5
 uv run word-vault delete apple
 ```
 
-## Task Runner
+`add` uses cache-first behavior by default to avoid repeated LLM calls.
+Use `--refresh` only when you want to fetch a new result from DeepSeek.
 
-`run.py` is a lightweight task runner to keep command usage consistent.
+## Development Commands
+
+Use direct uv entrypoints as the primary workflow:
 
 ```bash
-uv run run.py init
-uv run run.py test
-uv run run.py lint
-uv run run.py check
+uv run word-vault init-db
+uv run ruff check .
+uv run pytest
 ```
 
 ## Docs

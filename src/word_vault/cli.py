@@ -36,10 +36,26 @@ def init_db() -> None:
 def add(
     word: str,
     sentence: Annotated[str | None, typer.Option(help="Optional context sentence")] = None,
+    refresh: Annotated[
+        bool,
+        typer.Option(
+            "--refresh",
+            help="Force refresh from DeepSeek even if the word already exists.",
+        ),
+    ] = False,
 ) -> None:
-    """Add or update a word by querying DeepSeek."""
+    """Add a word with cache-first behavior and optional LLM refresh."""
     settings = get_settings()
     repo = get_repo(settings)
+
+    existing = repo.get_word(word)
+    if existing and not refresh:
+        typer.echo(
+            f"Word already exists in local vault: {word.lower()}. "
+            "Use --refresh to fetch from DeepSeek again."
+        )
+        return
+
     client = get_deepseek_client(settings)
 
     payload = client.fetch_word_info(word=word, sentence=sentence)
@@ -53,7 +69,10 @@ def add(
         pattern=payload["pattern"],
         source_sentence=source_sentence,
     )
-    typer.echo(f"Saved word: {word.lower()}")
+    if existing:
+        typer.echo(f"Updated word from DeepSeek: {word.lower()}")
+    else:
+        typer.echo(f"Saved word: {word.lower()}")
 
 
 @app.command()

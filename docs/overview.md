@@ -22,3 +22,9 @@ Word Vault is a personal command-line tool for English vocabulary learning.
 - Service: DeepSeek API client.
 - Storage: SQLite repository.
 - Config: `.env` + environment variables.
+
+## LLM Strategy
+
+- Cache-first by default: if a word already exists, skip repeated LLM calls.
+- Explicit refresh: call DeepSeek only when user passes `--refresh`.
+- Structured output: enforce fixed JSON schema in prompts and parse strictly.

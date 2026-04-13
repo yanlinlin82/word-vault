@@ -8,7 +8,11 @@ from word_vault import cli
 
 
 class FakeClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
     def fetch_word_info(self, word: str, sentence: str | None = None) -> dict[str, str]:
+        self.calls += 1
         return {
             "phonetic": "/test/",
             "meaning": f"Meaning for {word}",
@@ -21,13 +25,25 @@ class FakeClient:
 def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "cli.db"
     monkeypatch.setenv("WORD_VAULT_DB_PATH", str(db_path))
-    monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: FakeClient())
+    fake_client = FakeClient()
+    monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: fake_client)
 
     runner = CliRunner()
 
     add_result = runner.invoke(cli.app, ["add", "apple"])
     assert add_result.exit_code == 0
     assert "Saved word: apple" in add_result.stdout
+    assert fake_client.calls == 1
+
+    cached_add_result = runner.invoke(cli.app, ["add", "apple"])
+    assert cached_add_result.exit_code == 0
+    assert "Word already exists in local vault: apple" in cached_add_result.stdout
+    assert fake_client.calls == 1
+
+    refresh_result = runner.invoke(cli.app, ["add", "apple", "--refresh"])
+    assert refresh_result.exit_code == 0
+    assert "Updated word from DeepSeek: apple" in refresh_result.stdout
+    assert fake_client.calls == 2
 
     show_result = runner.invoke(cli.app, ["show", "apple"])
     assert show_result.exit_code == 0
