@@ -33,6 +33,10 @@ def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
     add_result = runner.invoke(cli.app, ["add", "apple"])
     assert add_result.exit_code == 0
     assert "Saved word: apple" in add_result.stdout
+    assert "Word: apple" in add_result.stdout
+    assert "Phonetic: /test/" in add_result.stdout
+    assert "Meaning: Meaning for apple" in add_result.stdout
+    assert "Source sentence: Example with apple." in add_result.stdout
     assert fake_client.calls == 1
 
     cached_add_result = runner.invoke(cli.app, ["add", "apple"])
@@ -43,6 +47,7 @@ def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
     refresh_result = runner.invoke(cli.app, ["add", "apple", "--refresh"])
     assert refresh_result.exit_code == 0
     assert "Updated word from DeepSeek: apple" in refresh_result.stdout
+    assert "Word: apple" in refresh_result.stdout
     assert fake_client.calls == 2
 
     show_result = runner.invoke(cli.app, ["show", "apple"])

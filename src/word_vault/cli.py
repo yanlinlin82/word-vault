@@ -5,6 +5,7 @@ from typing import Annotated
 import typer
 
 from .config import Settings, get_settings
+from .models import WordEntry
 from .services.llm_client import DeepSeekClient
 from .storage import WordRepository
 
@@ -31,6 +32,16 @@ def get_deepseek_client(settings: Settings) -> DeepSeekClient:
         model=settings.deepseek_model,
         base_url=settings.deepseek_base_url,
     )
+
+
+def echo_word_details(item: WordEntry) -> None:
+    typer.echo(f"Word: {item.word}")
+    typer.echo(f"Phonetic: {item.phonetic}")
+    typer.echo(f"Meaning: {item.meaning}")
+    typer.echo(f"Usage: {item.usage}")
+    typer.echo(f"Pattern: {item.pattern}")
+    typer.echo(f"Source sentence: {item.source_sentence}")
+    typer.echo(f"Review count: {item.review_count}")
 
 
 @app.command("init-db")
@@ -84,6 +95,12 @@ def add(
     else:
         typer.echo(f"Saved word: {word.lower()}")
 
+    item = repo.get_word(word)
+    if item is None:
+        raise typer.Exit(code=1)
+
+    echo_word_details(item)
+
 
 @app.command()
 def show(word: str) -> None:
@@ -95,13 +112,7 @@ def show(word: str) -> None:
     if item is None:
         raise typer.Exit(code=1)
 
-    typer.echo(f"Word: {item.word}")
-    typer.echo(f"Phonetic: {item.phonetic}")
-    typer.echo(f"Meaning: {item.meaning}")
-    typer.echo(f"Usage: {item.usage}")
-    typer.echo(f"Pattern: {item.pattern}")
-    typer.echo(f"Source sentence: {item.source_sentence}")
-    typer.echo(f"Review count: {item.review_count}")
+    echo_word_details(item)
 
 
 @app.command("list")
