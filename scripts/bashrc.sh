@@ -13,7 +13,7 @@ _word_vault_complete_word_show() {
     local current words
 
     current="${COMP_WORDS[COMP_CWORD]}"
-    words="$(_word_vault_run list "${current}*" 2>/dev/null | awk -F': ' '/^- / {print substr($1, 3)}')"
+    words="$(_word_vault_run list "${current}*" 2>/dev/null | awk '/^- / {print $2}')"
     COMPREPLY=( $(compgen -W "$words" -- "$current") )
 }
 
