@@ -25,6 +25,10 @@ word-show() {
     _word_vault_run show "$@"
 }
 
+word-speak() {
+    _word_vault_run speak "$@"
+}
+
 word-list() {
     _word_vault_run list "$@"
 }
@@ -38,3 +42,4 @@ word-delete() {
 }
 
 complete -F _word_vault_complete_word_show word-show
+complete -F _word_vault_complete_word_show word-speak

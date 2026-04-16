@@ -257,7 +257,11 @@ class WordRepository:
                 """
                 SELECT
                     w.*,
-                    (SELECT COUNT(*) FROM word_examples we WHERE we.word = w.word) AS example_count
+                    (
+                        SELECT COUNT(*)
+                        FROM word_examples we
+                        WHERE we.word = w.word
+                    ) AS example_count
                 FROM words w
                 WHERE w.word = ?
                 """,
@@ -287,7 +291,11 @@ class WordRepository:
                     """
                     SELECT
                         w.*,
-                        (SELECT COUNT(*) FROM word_examples we WHERE we.word = w.word) AS example_count
+                        (
+                            SELECT COUNT(*)
+                            FROM word_examples we
+                            WHERE we.word = w.word
+                        ) AS example_count
                     FROM words w
                     WHERE w.word GLOB ?
                     ORDER BY w.word ASC
@@ -299,7 +307,11 @@ class WordRepository:
                     """
                     SELECT
                         w.*,
-                        (SELECT COUNT(*) FROM word_examples we WHERE we.word = w.word) AS example_count
+                        (
+                            SELECT COUNT(*)
+                            FROM word_examples we
+                            WHERE we.word = w.word
+                        ) AS example_count
                     FROM words w
                     ORDER BY w.word ASC
                     """

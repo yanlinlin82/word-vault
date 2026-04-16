@@ -22,11 +22,22 @@ class FakeClient:
         }
 
 
+class FakeSpeaker:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    def __call__(self, word: str, phonetic: str, *, voice: str = "en-us") -> bool:
+        self.calls.append({"word": word, "phonetic": phonetic, "voice": voice})
+        return True
+
+
 def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "cli.db"
     monkeypatch.setenv("WORD_VAULT_DB_PATH", str(db_path))
     fake_client = FakeClient()
+    fake_speaker = FakeSpeaker()
     monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: fake_client)
+    monkeypatch.setattr(cli, "play_word_audio", fake_speaker)
 
     runner = CliRunner()
 
@@ -39,6 +50,7 @@ def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
     assert "Source sentence: Example with apple." in add_result.stdout
     assert "Example count: 1" in add_result.stdout
     assert fake_client.calls == 1
+    assert fake_speaker.calls == [{"word": "apple", "phonetic": "/test/", "voice": "en-us"}]
 
     cached_add_result = runner.invoke(cli.app, ["add", "apple"])
     assert cached_add_result.exit_code == 0
@@ -50,11 +62,18 @@ def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
     assert "Updated word from DeepSeek: apple" in refresh_result.stdout
     assert "Word: apple" in refresh_result.stdout
     assert fake_client.calls == 2
+    assert fake_speaker.calls[-1] == {"word": "apple", "phonetic": "/test/", "voice": "en-us"}
 
     show_result = runner.invoke(cli.app, ["show", "apple"])
     assert show_result.exit_code == 0
     assert "Word: apple" in show_result.stdout
     assert "Example count: 1" in show_result.stdout
+    assert len(fake_speaker.calls) == 2
+
+    speak_result = runner.invoke(cli.app, ["speak", "apple"])
+    assert speak_result.exit_code == 0
+    assert speak_result.stdout == ""
+    assert fake_speaker.calls[-1] == {"word": "apple", "phonetic": "/test/", "voice": "en-us"}
 
     review_result = runner.invoke(cli.app, ["review", "--count", "1"])
     assert review_result.exit_code == 0
@@ -71,7 +90,9 @@ def test_add_existing_word_with_new_sentence_adds_example_without_llm(
     db_path = tmp_path / "sentences.db"
     monkeypatch.setenv("WORD_VAULT_DB_PATH", str(db_path))
     fake_client = FakeClient()
+    fake_speaker = FakeSpeaker()
     monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: fake_client)
+    monkeypatch.setattr(cli, "play_word_audio", fake_speaker)
     runner = CliRunner()
 
     first_add = runner.invoke(cli.app, ["add", "apple"])
@@ -87,15 +108,76 @@ def test_add_existing_word_with_new_sentence_adds_example_without_llm(
     assert "Example count: 2" in second_add.stdout
     assert "I use apple in another sentence." in second_add.stdout
     assert fake_client.calls == 1
+    assert fake_speaker.calls[-1] == {"word": "apple", "phonetic": "/test/", "voice": "en-us"}
 
     duplicate_sentence_add = runner.invoke(
         cli.app,
         ["add", "apple", "--sentence", "I use apple in another sentence."],
     )
     assert duplicate_sentence_add.exit_code == 0
-    assert "Sentence already exists for: apple (seen count increased)" in duplicate_sentence_add.stdout
+    assert (
+        "Sentence already exists for: apple (seen count increased)"
+        in duplicate_sentence_add.stdout
+    )
     assert "I use apple in another sentence. (seen: 2)" in duplicate_sentence_add.stdout
     assert fake_client.calls == 1
+    assert fake_speaker.calls[-1] == {"word": "apple", "phonetic": "/test/", "voice": "en-us"}
+
+
+def test_audio_can_be_disabled_with_env(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "audio-disabled.db"
+    monkeypatch.setenv("WORD_VAULT_DB_PATH", str(db_path))
+    monkeypatch.setenv("WORD_VAULT_AUDIO_ENABLED", "0")
+    fake_client = FakeClient()
+    fake_speaker = FakeSpeaker()
+    monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: fake_client)
+    monkeypatch.setattr(cli, "play_word_audio", fake_speaker)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["add", "apple"])
+
+    assert result.exit_code == 0
+    assert fake_speaker.calls == []
+
+    speak_result = runner.invoke(cli.app, ["speak", "apple"])
+    assert speak_result.exit_code == 1
+    assert "Audio is disabled." in speak_result.stdout
+
+
+def test_show_speaks_only_with_flag(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "show-speak.db"
+    monkeypatch.setenv("WORD_VAULT_DB_PATH", str(db_path))
+    fake_client = FakeClient()
+    fake_speaker = FakeSpeaker()
+    monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: fake_client)
+    monkeypatch.setattr(cli, "play_word_audio", fake_speaker)
+    runner = CliRunner()
+
+    assert runner.invoke(cli.app, ["add", "apple"]).exit_code == 0
+    assert len(fake_speaker.calls) == 1
+
+    show_result = runner.invoke(cli.app, ["show", "apple"])
+    assert show_result.exit_code == 0
+    assert len(fake_speaker.calls) == 1
+
+    show_with_speak = runner.invoke(cli.app, ["show", "apple", "--speak"])
+    assert show_with_speak.exit_code == 0
+    assert len(fake_speaker.calls) == 2
+
+
+def test_speak_returns_error_when_playback_fails(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "speak-fail.db"
+    monkeypatch.setenv("WORD_VAULT_DB_PATH", str(db_path))
+    fake_client = FakeClient()
+    monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: fake_client)
+    monkeypatch.setattr(cli, "play_word_audio", lambda word, phonetic, voice="en-us": False)
+    runner = CliRunner()
+
+    assert runner.invoke(cli.app, ["add", "apple"]).exit_code == 0
+
+    result = runner.invoke(cli.app, ["speak", "apple"])
+    assert result.exit_code == 1
+    assert "Unable to play audio." in result.stdout
 
 
 def test_short_option_aliases_work(tmp_path: Path, monkeypatch) -> None:

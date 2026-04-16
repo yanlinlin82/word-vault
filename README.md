@@ -9,6 +9,7 @@ A personal command-line tool for looking up English words, saving meanings, phon
 - SQLite for local storage
 - DeepSeek API for LLM enrichment
 - python-dotenv for environment config
+- espeak-ng or espeak for optional IPA-based audio playback
 
 ## Project Layout
 
@@ -49,6 +50,8 @@ word-vault/
 uv run word-vault add apple --sentence "I ate an apple after lunch."
 uv run word-vault add apple --refresh
 uv run word-vault show apple
+uv run word-vault show apple --speak
+uv run word-vault speak apple
 uv run word-vault list
 uv run word-vault list 'app*'
 uv run word-vault review --count 5
@@ -58,6 +61,12 @@ uv run word-vault delete apple
 `add` uses cache-first behavior by default to avoid repeated LLM calls.
 Use `--refresh` only when you want to fetch a new result from DeepSeek.
 `list` supports `*` and `?` wildcards; quote patterns in the shell.
+`add` tries to play local audio from the stored IPA phonetic field when `espeak-ng` or `espeak` is available.
+`show` is mute by default; pass `--speak` when you want spoken output.
+`speak` is audio-only and uses the stored IPA pronunciation.
+
+Disable audio with `WORD_VAULT_AUDIO_ENABLED=0`.
+Set a specific voice with `WORD_VAULT_AUDIO_VOICE`, for example `en-us`.
 
 ## Development Commands
 
@@ -89,6 +98,8 @@ Then use shortcuts such as:
 word-add apple --sentence "I ate an apple after lunch."
 word-list
 word-show apple
+word-show apple --speak
+word-speak apple
 word-review --count 5
 word-delete apple
 ```

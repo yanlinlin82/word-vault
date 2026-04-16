@@ -6,6 +6,7 @@ import typer
 
 from .config import Settings, get_settings
 from .models import WordEntry
+from .services.audio import play_word_audio
 from .services.llm_client import DeepSeekClient
 from .storage import WordRepository
 
@@ -43,6 +44,12 @@ def echo_word_details(item: WordEntry) -> None:
     typer.echo(f"Source sentence: {item.source_sentence}")
     typer.echo(f"Example count: {item.example_count}")
     typer.echo(f"Review count: {item.review_count}")
+
+
+def maybe_play_audio(settings: Settings, item: WordEntry) -> None:
+    if not settings.audio_enabled:
+        return
+    play_word_audio(word=item.word, phonetic=item.phonetic, voice=settings.audio_voice)
 
 
 def echo_word_examples(repo: WordRepository, word: str) -> None:
@@ -98,6 +105,7 @@ def add(
                 raise typer.Exit(code=1)
             echo_word_details(item)
             echo_word_examples(repo, word)
+            maybe_play_audio(settings, item)
             return
 
         typer.echo(
@@ -130,10 +138,17 @@ def add(
 
     echo_word_details(item)
     echo_word_examples(repo, word)
+    maybe_play_audio(settings, item)
 
 
 @app.command()
-def show(word: str) -> None:
+def show(
+    word: str,
+    speak: Annotated[
+        bool,
+        typer.Option("--speak", "-s", help="Speak word audio after showing details."),
+    ] = False,
+) -> None:
     """Show details of one word."""
     settings = get_settings()
     repo = get_repo(settings)
@@ -144,6 +159,28 @@ def show(word: str) -> None:
 
     echo_word_details(item)
     echo_word_examples(repo, word)
+    if speak:
+        maybe_play_audio(settings, item)
+
+
+@app.command()
+def speak(word: str) -> None:
+    """Speak one stored word using its IPA pronunciation."""
+    settings = get_settings()
+    repo = get_repo(settings)
+    item = repo.get_word(word)
+
+    if item is None:
+        raise typer.Exit(code=1)
+
+    if not settings.audio_enabled:
+        typer.echo("Audio is disabled. Set WORD_VAULT_AUDIO_ENABLED=1 to enable it.")
+        raise typer.Exit(code=1)
+
+    ok = play_word_audio(word=item.word, phonetic=item.phonetic, voice=settings.audio_voice)
+    if not ok:
+        typer.echo("Unable to play audio. Install espeak-ng/espeak or check your audio setup.")
+        raise typer.Exit(code=1)
 
 
 @app.command("list")
@@ -167,7 +204,9 @@ def list_words(
 
 
 @app.command()
-def review(count: Annotated[int, typer.Option("--count", "-c", help="Number of words")] = 5) -> None:
+def review(
+    count: Annotated[int, typer.Option("--count", "-c", help="Number of words")] = 5,
+) -> None:
     """Show words to review and update review stats."""
     settings = get_settings()
     repo = get_repo(settings)
