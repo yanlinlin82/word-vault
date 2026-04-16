@@ -32,9 +32,19 @@ class FakeSpeaker:
         return True
 
 
+class FakeTextSpeaker:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    def __call__(self, text: str, *, voice: str = "en-us") -> bool:
+        self.calls.append({"text": text, "voice": voice})
+        return True
+
+
 @pytest.fixture(autouse=True)
 def disable_real_audio(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "play_word_audio", lambda word, phonetic, voice="en-us": True)
+    monkeypatch.setattr(cli, "play_text_audio", lambda text, voice="en-us": True)
 
 
 def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
@@ -84,10 +94,11 @@ def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
     review_result = runner.invoke(
         cli.app,
         ["review", "--count", "1"],
-        input="apple\n4\n",
+        input="apple\nA\n\n4\n",
     )
     assert review_result.exit_code == 0
     assert "Phonetic: /test/" in review_result.stdout
+    assert "Meaning choices:" in review_result.stdout
     assert "Saved review for apple: final score=4" in review_result.stdout
 
     delete_result = runner.invoke(cli.app, ["delete", "apple"])
@@ -157,7 +168,7 @@ def test_audio_can_be_disabled_with_env(tmp_path: Path, monkeypatch) -> None:
     review_result = runner.invoke(
         cli.app,
         ["review", "--count", "1"],
-        input="apple\n4\n",
+        input="apple\nA\n\n4\n",
     )
     assert review_result.exit_code == 0
     assert "Audio is disabled. Running IPA-only dictation prompts." in review_result.stdout
@@ -221,7 +232,7 @@ def test_short_option_aliases_work(tmp_path: Path, monkeypatch) -> None:
     review_result = runner.invoke(
         cli.app,
         ["review", "-c", "1"],
-        input="apple\n4\n",
+        input="apple\nA\n\n4\n",
     )
     assert review_result.exit_code == 0
     assert "Saved review for apple: final score=4" in review_result.stdout
@@ -240,13 +251,44 @@ def test_word_review_wrong_spelling_one_retry(tmp_path: Path, monkeypatch) -> No
     result = runner.invoke(
         cli.app,
         ["review", "--count", "1"],
-        input="aple\napal\n5\n",
+        input="aple\napal\nA\n\n5\n",
     )
 
     assert result.exit_code == 0
     assert "Not correct. Try once more." in result.stdout
     assert "Spelling not correct. Correct word: apple" in result.stdout
     assert "Saved review for apple: final score=1" in result.stdout
+
+
+def test_review_plays_sentence_audio_and_uses_meaning_distractors(
+    tmp_path: Path, monkeypatch
+) -> None:
+    db_path = tmp_path / "review-meaning-options.db"
+    monkeypatch.setenv("WORD_VAULT_DB_PATH", str(db_path))
+    fake_client = FakeClient()
+    fake_text_speaker = FakeTextSpeaker()
+    monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: fake_client)
+    monkeypatch.setattr(cli, "play_text_audio", fake_text_speaker)
+    runner = CliRunner()
+
+    assert runner.invoke(cli.app, ["add", "apple"]).exit_code == 0
+    assert runner.invoke(cli.app, ["add", "banana"]).exit_code == 0
+    assert runner.invoke(cli.app, ["add", "orange"]).exit_code == 0
+    assert runner.invoke(cli.app, ["add", "grape"]).exit_code == 0
+
+    result = runner.invoke(
+        cli.app,
+        ["review", "--count", "1"],
+        input="apple\nC\n\n5\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Meaning choices:" in result.stdout
+    assert "Meaning for banana" in result.stdout
+    assert "Meaning for orange" in result.stdout
+    assert "Meaning for grape" in result.stdout
+    assert "Example with apple." in result.stdout
+    assert fake_text_speaker.calls == [{"text": "Example with apple.", "voice": "en-us"}]
 
 
 def test_show_not_found(tmp_path: Path, monkeypatch) -> None:

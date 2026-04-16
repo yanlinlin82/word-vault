@@ -6,7 +6,7 @@ import typer
 
 from .config import Settings, get_settings
 from .models import WordEntry
-from .services.audio import play_word_audio
+from .services.audio import play_text_audio, play_word_audio
 from .services.llm_client import DeepSeekClient
 from .storage import WordRepository
 
@@ -52,6 +52,12 @@ def maybe_play_audio(settings: Settings, item: WordEntry) -> None:
     play_word_audio(word=item.word, phonetic=item.phonetic, voice=settings.audio_voice)
 
 
+def maybe_play_text(settings: Settings, text: str) -> None:
+    if not settings.audio_enabled:
+        return
+    play_text_audio(text=text, voice=settings.audio_voice)
+
+
 def prompt_quality_score() -> int:
     while True:
         quality = typer.prompt("Recall score (0-5, 5 = easy)", type=int, default=4)
@@ -67,6 +73,31 @@ def spelling_score_from_attempts(word: str, first_attempt: str, second_attempt: 
     if second_attempt is not None and second_attempt.strip().lower() == normalized_word:
         return 3
     return 1
+
+
+def build_meaning_options(repo: WordRepository, item: WordEntry) -> tuple[list[str], int]:
+    options = repo.review_meaning_options(item.word, option_count=4)
+    if not options:
+        return [], -1
+
+    rotation = sum(ord(char) for char in item.word) % len(options)
+    ordered_options = options[rotation:] + options[:rotation]
+    correct_index = ordered_options.index(item.meaning)
+    return ordered_options, correct_index
+
+
+def prompt_meaning_choice(options: list[str]) -> int:
+    labels = [chr(ord("A") + index) for index in range(len(options))]
+    allowed = set(labels)
+    while True:
+        answer = typer.prompt(f"Choose meaning ({'/'.join(labels)})").strip().upper()
+        if answer in allowed:
+            return labels.index(answer)
+        typer.echo(f"Please choose one of: {', '.join(labels)}.")
+
+
+def meaning_score_from_choice(selected_index: int, correct_index: int) -> int:
+    return 5 if selected_index == correct_index else 2
 
 
 def echo_word_examples(repo: WordRepository, word: str) -> None:
@@ -224,7 +255,7 @@ def list_words(
 def review(
     count: Annotated[int, typer.Option("--count", "-c", help="Number of words")] = 5,
 ) -> None:
-    """Run interactive review with dictation and spaced-repetition scoring."""
+    """Run interactive review covering listening, reading, writing, and speaking."""
     settings = get_settings()
     repo = get_repo(settings)
     items = repo.review_candidates(count=count)
@@ -255,18 +286,42 @@ def review(
         else:
             typer.echo(f"Spelling not correct. Correct word: {item.word}")
 
+        typer.echo("Meaning choices:")
+        meaning_options, correct_meaning_index = build_meaning_options(repo, item)
+        for option_index, option in enumerate(meaning_options, start=1):
+            label = chr(ord("A") + option_index - 1)
+            typer.echo(f"  {label}. {option}")
+        selected_meaning_index = prompt_meaning_choice(meaning_options)
+        meaning_score = meaning_score_from_choice(selected_meaning_index, correct_meaning_index)
+        if meaning_score == 5:
+            typer.echo("Meaning choice correct.")
+        else:
+            correct_label = chr(ord("A") + correct_meaning_index)
+            typer.echo(f"Meaning choice not correct. Correct answer: {correct_label}.")
+
         typer.echo(f"Meaning: {item.meaning}")
         typer.echo(f"Usage: {item.usage}")
         typer.echo(f"Pattern: {item.pattern}")
-        typer.echo(f"Source sentence: {item.source_sentence}")
+
+        examples = repo.list_examples(item.word)
+        if not examples:
+            typer.echo(f"Example 1: {item.source_sentence}")
+            maybe_play_text(settings, item.source_sentence)
+        else:
+            typer.echo("Examples:")
+            for example_index, example in enumerate(examples, start=1):
+                typer.echo(f"  {example_index}. {example.sentence}")
+                maybe_play_text(settings, example.sentence)
+
+        typer.prompt("Read one example sentence aloud, then press Enter", default="", show_default=False)
 
         recall_quality = prompt_quality_score()
-        final_quality = min(recall_quality, spelling_score)
+        final_quality = min(recall_quality, spelling_score, meaning_score)
         repo.record_review_result(item.word, quality=final_quality)
 
         typer.echo(
             f"Saved review for {item.word}: final score={final_quality} "
-            f"(recall={recall_quality}, spelling={spelling_score})"
+            f"(recall={recall_quality}, spelling={spelling_score}, meaning={meaning_score})"
         )
 
 

@@ -172,3 +172,48 @@ def test_review_candidates_prioritize_due_words(tmp_path: Path) -> None:
     candidates = repo.review_candidates(count=2)
     assert len(candidates) == 2
     assert candidates[0].word == "banana"
+
+
+def test_review_meaning_options_include_other_words(tmp_path: Path) -> None:
+    repo = build_repo(tmp_path)
+
+    repo.add_or_replace_word(
+        word="apple",
+        phonetic="/ˈæp.əl/",
+        meaning="A fruit.",
+        usage="Common noun.",
+        pattern="eat an apple",
+        source_sentence="I ate an apple.",
+    )
+    repo.add_or_replace_word(
+        word="banana",
+        phonetic="/bəˈnæn.ə/",
+        meaning="A yellow fruit.",
+        usage="Common noun.",
+        pattern="peel a banana",
+        source_sentence="He peeled a banana.",
+    )
+    repo.add_or_replace_word(
+        word="grape",
+        phonetic="/ɡreɪp/",
+        meaning="A small round fruit.",
+        usage="Common noun.",
+        pattern="eat grapes",
+        source_sentence="They ate grapes.",
+    )
+    repo.add_or_replace_word(
+        word="orange",
+        phonetic="/ˈɒr.ɪndʒ/",
+        meaning="A citrus fruit.",
+        usage="Common noun.",
+        pattern="peel an orange",
+        source_sentence="She peeled an orange.",
+    )
+
+    options = repo.review_meaning_options("apple", option_count=4)
+
+    assert options[0] == "A fruit."
+    assert len(options) == 4
+    assert "A yellow fruit." in options
+    assert "A small round fruit." in options
+    assert "A citrus fruit." in options

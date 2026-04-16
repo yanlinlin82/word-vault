@@ -378,6 +378,26 @@ class WordRepository:
             ).fetchall()
         return [self._row_to_entry(row) for row in rows]
 
+    def review_meaning_options(self, word: str, option_count: int = 4) -> list[str]:
+        target = self.get_word(word)
+        if target is None:
+            return []
+
+        distractor_limit = max(0, option_count - 1)
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT meaning
+                FROM words
+                WHERE word != ? AND meaning != ?
+                ORDER BY meaning ASC
+                LIMIT ?
+                """,
+                (word.lower(), target.meaning, distractor_limit),
+            ).fetchall()
+
+        return [target.meaning, *[row["meaning"] for row in rows]]
+
     def mark_reviewed(self, word: str) -> None:
         self.record_review_result(word, quality=4)
 

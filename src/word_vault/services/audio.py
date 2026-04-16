@@ -112,6 +112,24 @@ def play_word_audio(word: str, phonetic: str, *, voice: str = "en-us") -> bool:
     return True
 
 
+def play_text_audio(text: str, *, voice: str = "en-us") -> bool:
+    engine = _find_engine()
+    if engine is None:
+        return False
+
+    try:
+        subprocess.run(
+            [engine, "-v", voice, text],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return False
+
+    return True
+
+
 def _build_speech_input(*, word: str, phonetic: str) -> str:
     espeak_phonemes = ipa_to_espeak_phonemes(phonetic)
     if espeak_phonemes:
