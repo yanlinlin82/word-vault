@@ -37,6 +37,7 @@ def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
     assert "Phonetic: /test/" in add_result.stdout
     assert "Meaning: Meaning for apple" in add_result.stdout
     assert "Source sentence: Example with apple." in add_result.stdout
+    assert "Example count: 1" in add_result.stdout
     assert fake_client.calls == 1
 
     cached_add_result = runner.invoke(cli.app, ["add", "apple"])
@@ -53,6 +54,7 @@ def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
     show_result = runner.invoke(cli.app, ["show", "apple"])
     assert show_result.exit_code == 0
     assert "Word: apple" in show_result.stdout
+    assert "Example count: 1" in show_result.stdout
 
     review_result = runner.invoke(cli.app, ["review", "--count", "1"])
     assert review_result.exit_code == 0
@@ -61,6 +63,39 @@ def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
     delete_result = runner.invoke(cli.app, ["delete", "apple"])
     assert delete_result.exit_code == 0
     assert "Deleted word: apple" in delete_result.stdout
+
+
+def test_add_existing_word_with_new_sentence_adds_example_without_llm(
+    tmp_path: Path, monkeypatch
+) -> None:
+    db_path = tmp_path / "sentences.db"
+    monkeypatch.setenv("WORD_VAULT_DB_PATH", str(db_path))
+    fake_client = FakeClient()
+    monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: fake_client)
+    runner = CliRunner()
+
+    first_add = runner.invoke(cli.app, ["add", "apple"])
+    assert first_add.exit_code == 0
+    assert fake_client.calls == 1
+
+    second_add = runner.invoke(
+        cli.app,
+        ["add", "apple", "--sentence", "I use apple in another sentence."],
+    )
+    assert second_add.exit_code == 0
+    assert "Added new sentence example for: apple" in second_add.stdout
+    assert "Example count: 2" in second_add.stdout
+    assert "I use apple in another sentence." in second_add.stdout
+    assert fake_client.calls == 1
+
+    duplicate_sentence_add = runner.invoke(
+        cli.app,
+        ["add", "apple", "--sentence", "I use apple in another sentence."],
+    )
+    assert duplicate_sentence_add.exit_code == 0
+    assert "Sentence already exists for: apple (seen count increased)" in duplicate_sentence_add.stdout
+    assert "I use apple in another sentence. (seen: 2)" in duplicate_sentence_add.stdout
+    assert fake_client.calls == 1
 
 
 def test_show_not_found(tmp_path: Path, monkeypatch) -> None:

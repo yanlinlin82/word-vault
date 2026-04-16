@@ -41,7 +41,18 @@ def echo_word_details(item: WordEntry) -> None:
     typer.echo(f"Usage: {item.usage}")
     typer.echo(f"Pattern: {item.pattern}")
     typer.echo(f"Source sentence: {item.source_sentence}")
+    typer.echo(f"Example count: {item.example_count}")
     typer.echo(f"Review count: {item.review_count}")
+
+
+def echo_word_examples(repo: WordRepository, word: str) -> None:
+    examples = repo.list_examples(word)
+    if not examples:
+        return
+    typer.echo("Examples:")
+    for example in examples:
+        primary = " [primary]" if example.is_primary else ""
+        typer.echo(f"- {example.sentence} (seen: {example.seen_count}){primary}")
 
 
 @app.command("init-db")
@@ -71,6 +82,20 @@ def add(
 
     existing = repo.get_word(word)
     if existing and not refresh:
+        if sentence:
+            added = repo.add_sentence_example(word=word, sentence=sentence, source_type="user")
+            if added:
+                typer.echo(f"Added new sentence example for: {word.lower()}")
+            else:
+                typer.echo(f"Sentence already exists for: {word.lower()} (seen count increased)")
+
+            item = repo.get_word(word)
+            if item is None:
+                raise typer.Exit(code=1)
+            echo_word_details(item)
+            echo_word_examples(repo, word)
+            return
+
         typer.echo(
             f"Word already exists in local vault: {word.lower()}. "
             "Use --refresh to fetch from DeepSeek again."
@@ -100,6 +125,7 @@ def add(
         raise typer.Exit(code=1)
 
     echo_word_details(item)
+    echo_word_examples(repo, word)
 
 
 @app.command()
@@ -113,6 +139,7 @@ def show(word: str) -> None:
         raise typer.Exit(code=1)
 
     echo_word_details(item)
+    echo_word_examples(repo, word)
 
 
 @app.command("list")
