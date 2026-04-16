@@ -67,11 +67,15 @@ def init_db() -> None:
 @app.command()
 def add(
     word: str,
-    sentence: Annotated[str | None, typer.Option(help="Optional context sentence")] = None,
+    sentence: Annotated[
+        str | None,
+        typer.Option("--sentence", "-s", help="Optional context sentence"),
+    ] = None,
     refresh: Annotated[
         bool,
         typer.Option(
             "--refresh",
+            "-r",
             help="Force refresh from DeepSeek even if the word already exists.",
         ),
     ] = False,
@@ -163,7 +167,7 @@ def list_words(
 
 
 @app.command()
-def review(count: Annotated[int, typer.Option(help="Number of words")] = 5) -> None:
+def review(count: Annotated[int, typer.Option("--count", "-c", help="Number of words")] = 5) -> None:
     """Show words to review and update review stats."""
     settings = get_settings()
     repo = get_repo(settings)

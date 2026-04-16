@@ -98,6 +98,30 @@ def test_add_existing_word_with_new_sentence_adds_example_without_llm(
     assert fake_client.calls == 1
 
 
+def test_short_option_aliases_work(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "short-options.db"
+    monkeypatch.setenv("WORD_VAULT_DB_PATH", str(db_path))
+    fake_client = FakeClient()
+    monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: fake_client)
+    runner = CliRunner()
+
+    add_result = runner.invoke(
+        cli.app,
+        ["add", "apple", "-s", "I ate an apple after lunch."],
+    )
+    assert add_result.exit_code == 0
+    assert "Saved word: apple" in add_result.stdout
+    assert "Source sentence: I ate an apple after lunch." in add_result.stdout
+
+    refresh_result = runner.invoke(cli.app, ["add", "apple", "-r"])
+    assert refresh_result.exit_code == 0
+    assert "Updated word from DeepSeek: apple" in refresh_result.stdout
+
+    review_result = runner.invoke(cli.app, ["review", "-c", "1"])
+    assert review_result.exit_code == 0
+    assert "[apple]" in review_result.stdout
+
+
 def test_show_not_found(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("WORD_VAULT_DB_PATH", str(tmp_path / "empty.db"))
     runner = CliRunner()
