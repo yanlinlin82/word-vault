@@ -159,7 +159,7 @@ def list_words(
         return
 
     for item in items:
-        typer.echo(f"- {item.word}: {item.meaning}")
+        typer.echo(f"- {item.word} {item.phonetic}: {item.meaning}")
 
 
 @app.command()
