@@ -17,7 +17,12 @@ CREATE TABLE IF NOT EXISTS words (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     last_reviewed_at TEXT,
-    review_count INTEGER NOT NULL DEFAULT 0
+    review_count INTEGER NOT NULL DEFAULT 0,
+    ease_factor REAL NOT NULL DEFAULT 2.5,
+    interval_days INTEGER NOT NULL DEFAULT 0,
+    due_at TEXT,
+    lapse_count INTEGER NOT NULL DEFAULT 0,
+    correct_streak INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS word_examples (
@@ -50,8 +55,33 @@ class WordRepository:
     def _init_db(self) -> None:
         with self._connect() as conn:
             conn.executescript(SCHEMA_SQL)
+            self._migrate_words_schema(conn)
             self._backfill_examples_from_words(conn)
             conn.commit()
+
+    def _migrate_words_schema(self, conn: sqlite3.Connection) -> None:
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(words)").fetchall()
+        }
+        migrations: list[tuple[str, str]] = [
+            ("ease_factor", "ALTER TABLE words ADD COLUMN ease_factor REAL NOT NULL DEFAULT 2.5"),
+            (
+                "interval_days",
+                "ALTER TABLE words ADD COLUMN interval_days INTEGER NOT NULL DEFAULT 0",
+            ),
+            ("due_at", "ALTER TABLE words ADD COLUMN due_at TEXT"),
+            (
+                "lapse_count",
+                "ALTER TABLE words ADD COLUMN lapse_count INTEGER NOT NULL DEFAULT 0",
+            ),
+            (
+                "correct_streak",
+                "ALTER TABLE words ADD COLUMN correct_streak INTEGER NOT NULL DEFAULT 0",
+            ),
+        ]
+        for column, sql in migrations:
+            if column not in columns:
+                conn.execute(sql)
 
     def _backfill_examples_from_words(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute(
@@ -98,8 +128,9 @@ class WordRepository:
                 """
                 INSERT INTO words (
                     word, phonetic, meaning, usage, pattern, source_sentence,
-                    created_at, updated_at, last_reviewed_at, review_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 0)
+                    created_at, updated_at, last_reviewed_at, review_count,
+                    ease_factor, interval_days, due_at, lapse_count, correct_streak
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, 2.5, 0, NULL, 0, 0)
                 ON CONFLICT(word) DO UPDATE SET
                     phonetic=excluded.phonetic,
                     meaning=excluded.meaning,
@@ -326,34 +357,109 @@ class WordRepository:
             return cur.rowcount > 0
 
     def review_candidates(self, count: int) -> list[WordEntry]:
+        now = datetime.datetime.now(datetime.UTC).isoformat()
         with self._connect() as conn:
             rows = conn.execute(
                 """
                 SELECT *
                 FROM words
                 ORDER BY
-                    CASE WHEN last_reviewed_at IS NULL THEN 0 ELSE 1 END,
-                    last_reviewed_at ASC,
+                    CASE
+                        WHEN due_at IS NULL THEN 0
+                        WHEN due_at <= ? THEN 0
+                        ELSE 1
+                    END,
+                    due_at ASC,
                     review_count ASC,
                     updated_at ASC
                 LIMIT ?
                 """,
-                (count,),
+                (now, count),
             ).fetchall()
         return [self._row_to_entry(row) for row in rows]
 
     def mark_reviewed(self, word: str) -> None:
+        self.record_review_result(word, quality=4)
+
+    def record_review_result(self, word: str, quality: int) -> None:
+        bounded_quality = max(0, min(5, quality))
         now = datetime.datetime.now(datetime.UTC).isoformat()
         with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT ease_factor, interval_days, lapse_count, correct_streak
+                FROM words
+                WHERE word = ?
+                """,
+                (word.lower(),),
+            ).fetchone()
+            if row is None:
+                return
+
+            next_ease_factor, next_interval_days, next_lapse_count, next_correct_streak = (
+                self._compute_next_schedule(
+                    ease_factor=float(row["ease_factor"]),
+                    interval_days=int(row["interval_days"]),
+                    lapse_count=int(row["lapse_count"]),
+                    correct_streak=int(row["correct_streak"]),
+                    quality=bounded_quality,
+                )
+            )
+            due_at = (
+                datetime.datetime.now(datetime.UTC)
+                + datetime.timedelta(days=next_interval_days)
+            ).isoformat()
             conn.execute(
                 """
                 UPDATE words
-                SET last_reviewed_at = ?, review_count = review_count + 1
+                SET
+                    last_reviewed_at = ?,
+                    review_count = review_count + 1,
+                    ease_factor = ?,
+                    interval_days = ?,
+                    due_at = ?,
+                    lapse_count = ?,
+                    correct_streak = ?
                 WHERE word = ?
                 """,
-                (now, word.lower()),
+                (
+                    now,
+                    next_ease_factor,
+                    next_interval_days,
+                    due_at,
+                    next_lapse_count,
+                    next_correct_streak,
+                    word.lower(),
+                ),
             )
             conn.commit()
+
+    @staticmethod
+    def _compute_next_schedule(
+        *,
+        ease_factor: float,
+        interval_days: int,
+        lapse_count: int,
+        correct_streak: int,
+        quality: int,
+    ) -> tuple[float, int, int, int]:
+        quality_gap = 5 - quality
+        next_ease_factor = ease_factor + (
+            0.1 - quality_gap * (0.08 + quality_gap * 0.02)
+        )
+        next_ease_factor = max(1.3, round(next_ease_factor, 2))
+
+        if quality < 3:
+            return next_ease_factor, 1, lapse_count + 1, 0
+
+        next_correct_streak = correct_streak + 1
+        if next_correct_streak == 1:
+            next_interval_days = 1
+        elif next_correct_streak == 2:
+            next_interval_days = 6
+        else:
+            next_interval_days = max(1, round(interval_days * next_ease_factor))
+        return next_ease_factor, next_interval_days, lapse_count, next_correct_streak
 
     @staticmethod
     def _row_to_entry(row: sqlite3.Row) -> WordEntry:
@@ -372,6 +478,17 @@ class WordRepository:
                 else None
             ),
             review_count=row["review_count"],
+            ease_factor=float(row["ease_factor"]) if "ease_factor" in row.keys() else 2.5,
+            interval_days=int(row["interval_days"]) if "interval_days" in row.keys() else 0,
+            due_at=(
+                datetime.datetime.fromisoformat(row["due_at"])
+                if "due_at" in row.keys() and row["due_at"]
+                else None
+            ),
+            lapse_count=int(row["lapse_count"]) if "lapse_count" in row.keys() else 0,
+            correct_streak=(
+                int(row["correct_streak"]) if "correct_streak" in row.keys() else 0
+            ),
             example_count=row["example_count"] if "example_count" in row.keys() else 0,
         )
 

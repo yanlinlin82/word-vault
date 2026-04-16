@@ -16,6 +16,11 @@ class WordEntry:
     updated_at: datetime
     last_reviewed_at: datetime | None
     review_count: int
+    ease_factor: float = 2.5
+    interval_days: int = 0
+    due_at: datetime | None = None
+    lapse_count: int = 0
+    correct_streak: int = 0
     example_count: int = 0
 
 

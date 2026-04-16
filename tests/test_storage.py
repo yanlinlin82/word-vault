@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
 
 from word_vault.storage import WordRepository
@@ -107,3 +108,67 @@ def test_review_updates_counter(tmp_path: Path) -> None:
     assert updated is not None
     assert updated.review_count == 1
     assert updated.last_reviewed_at is not None
+
+
+def test_record_review_result_updates_sm2_fields(tmp_path: Path) -> None:
+    repo = build_repo(tmp_path)
+
+    repo.add_or_replace_word(
+        word="orange",
+        phonetic="/ˈɒr.ɪndʒ/",
+        meaning="A citrus fruit.",
+        usage="Common noun.",
+        pattern="peel an orange",
+        source_sentence="She peeled an orange.",
+    )
+
+    repo.record_review_result("orange", quality=5)
+    first = repo.get_word("orange")
+    assert first is not None
+    assert first.review_count == 1
+    assert first.correct_streak == 1
+    assert first.interval_days == 1
+    assert first.ease_factor >= 2.6
+    assert first.due_at is not None
+
+    repo.record_review_result("orange", quality=1)
+    second = repo.get_word("orange")
+    assert second is not None
+    assert second.review_count == 2
+    assert second.correct_streak == 0
+    assert second.lapse_count == 1
+    assert second.interval_days == 1
+    assert second.due_at is not None
+
+
+def test_review_candidates_prioritize_due_words(tmp_path: Path) -> None:
+    repo = build_repo(tmp_path)
+
+    repo.add_or_replace_word(
+        word="apple",
+        phonetic="/ˈæp.əl/",
+        meaning="A fruit.",
+        usage="Common noun.",
+        pattern="eat an apple",
+        source_sentence="I ate an apple.",
+    )
+    repo.add_or_replace_word(
+        word="banana",
+        phonetic="/bəˈnæn.ə/",
+        meaning="Another fruit.",
+        usage="Common noun.",
+        pattern="peel a banana",
+        source_sentence="He peeled a banana.",
+    )
+
+    now = datetime.datetime.now(datetime.UTC)
+    past_due = (now - datetime.timedelta(days=1)).isoformat()
+    future_due = (now + datetime.timedelta(days=10)).isoformat()
+    with repo._connect() as conn:
+        conn.execute("UPDATE words SET due_at = ? WHERE word = ?", (future_due, "apple"))
+        conn.execute("UPDATE words SET due_at = ? WHERE word = ?", (past_due, "banana"))
+        conn.commit()
+
+    candidates = repo.review_candidates(count=2)
+    assert len(candidates) == 2
+    assert candidates[0].word == "banana"

@@ -66,7 +66,14 @@ uv run word-vault list 'b?nana'
 
 ## review
 
-Show words for review and mark as reviewed.
+Interactive review session with merged dictation + recall scoring.
+
+- Shows only IPA first and optionally plays pronunciation audio.
+- Prompts you to spell the word.
+- If spelling is wrong, allows one retry, then shows the correct spelling.
+- Reveals meaning and usage details.
+- Asks for recall score from 0 to 5 and applies SM-2 spaced-repetition scheduling.
+- Wrong spelling lowers the final quality score, so unfamiliar words are scheduled sooner.
 
 ```bash
 uv run word-vault review --count 5

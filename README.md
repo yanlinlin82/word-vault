@@ -64,6 +64,7 @@ Use `--refresh` only when you want to fetch a new result from DeepSeek.
 `add` tries to play local audio from the stored IPA phonetic field when `espeak-ng` or `espeak` is available.
 `show` is mute by default; pass `--speak` when you want spoken output.
 `speak` is audio-only and uses the stored IPA pronunciation.
+`review` merges dictation and recall scoring in one flow (IPA/audio, spelling with one retry, then 0-5 score) and schedules future reviews with an SM-2 style forgetting-curve strategy.
 
 Disable audio with `WORD_VAULT_AUDIO_ENABLED=0`.
 Set a specific voice with `WORD_VAULT_AUDIO_VOICE`, for example `en-us`.

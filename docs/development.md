@@ -11,6 +11,7 @@
 
 - Keep business logic in `src/word_vault/`.
 - Keep tests in `tests/` and mock external APIs.
+- Mock audio playback in tests; do not invoke real `espeak`/`espeak-ng` from unit tests.
 - Keep docs in `docs/` and update them when behavior changes.
 
 ## CI/CD Best Practices

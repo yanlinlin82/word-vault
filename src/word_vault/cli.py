@@ -52,6 +52,23 @@ def maybe_play_audio(settings: Settings, item: WordEntry) -> None:
     play_word_audio(word=item.word, phonetic=item.phonetic, voice=settings.audio_voice)
 
 
+def prompt_quality_score() -> int:
+    while True:
+        quality = typer.prompt("Recall score (0-5, 5 = easy)", type=int, default=4)
+        if 0 <= quality <= 5:
+            return quality
+        typer.echo("Please enter a number between 0 and 5.")
+
+
+def spelling_score_from_attempts(word: str, first_attempt: str, second_attempt: str | None) -> int:
+    normalized_word = word.strip().lower()
+    if first_attempt.strip().lower() == normalized_word:
+        return 5
+    if second_attempt is not None and second_attempt.strip().lower() == normalized_word:
+        return 3
+    return 1
+
+
 def echo_word_examples(repo: WordRepository, word: str) -> None:
     examples = repo.list_examples(word)
     if not examples:
@@ -203,11 +220,11 @@ def list_words(
         typer.echo(f"- {item.word} {item.phonetic}: {item.meaning}")
 
 
-@app.command()
+@app.command("review")
 def review(
     count: Annotated[int, typer.Option("--count", "-c", help="Number of words")] = 5,
 ) -> None:
-    """Show words to review and update review stats."""
+    """Run interactive review with dictation and spaced-repetition scoring."""
     settings = get_settings()
     repo = get_repo(settings)
     items = repo.review_candidates(count=count)
@@ -216,11 +233,41 @@ def review(
         typer.echo("No words found.")
         return
 
-    for item in items:
-        typer.echo(f"[{item.word}] {item.meaning}")
-        typer.echo(f"  usage: {item.usage}")
-        typer.echo(f"  pattern: {item.pattern}")
-        repo.mark_reviewed(item.word)
+    if not settings.audio_enabled:
+        typer.echo("Audio is disabled. Running IPA-only dictation prompts.")
+
+    for index, item in enumerate(items, start=1):
+        typer.echo(f"\n--- Review {index}/{len(items)} ---")
+        typer.echo(f"Phonetic: {item.phonetic}")
+        maybe_play_audio(settings, item)
+
+        first_attempt = typer.prompt("Spell the word")
+        second_attempt: str | None = None
+        if first_attempt.strip().lower() != item.word.lower():
+            typer.echo("Not correct. Try once more.")
+            second_attempt = typer.prompt("Spell the word (retry)")
+
+        spelling_score = spelling_score_from_attempts(item.word, first_attempt, second_attempt)
+        if spelling_score == 5:
+            typer.echo("Spelling correct on first try.")
+        elif spelling_score == 3:
+            typer.echo("Spelling correct on retry.")
+        else:
+            typer.echo(f"Spelling not correct. Correct word: {item.word}")
+
+        typer.echo(f"Meaning: {item.meaning}")
+        typer.echo(f"Usage: {item.usage}")
+        typer.echo(f"Pattern: {item.pattern}")
+        typer.echo(f"Source sentence: {item.source_sentence}")
+
+        recall_quality = prompt_quality_score()
+        final_quality = min(recall_quality, spelling_score)
+        repo.record_review_result(item.word, quality=final_quality)
+
+        typer.echo(
+            f"Saved review for {item.word}: final score={final_quality} "
+            f"(recall={recall_quality}, spelling={spelling_score})"
+        )
 
 
 @app.command()

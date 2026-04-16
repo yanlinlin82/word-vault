@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from word_vault import cli
@@ -29,6 +30,11 @@ class FakeSpeaker:
     def __call__(self, word: str, phonetic: str, *, voice: str = "en-us") -> bool:
         self.calls.append({"word": word, "phonetic": phonetic, "voice": voice})
         return True
+
+
+@pytest.fixture(autouse=True)
+def disable_real_audio(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "play_word_audio", lambda word, phonetic, voice="en-us": True)
 
 
 def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
@@ -75,9 +81,14 @@ def test_add_show_delete_flow(tmp_path: Path, monkeypatch) -> None:
     assert speak_result.stdout == ""
     assert fake_speaker.calls[-1] == {"word": "apple", "phonetic": "/test/", "voice": "en-us"}
 
-    review_result = runner.invoke(cli.app, ["review", "--count", "1"])
+    review_result = runner.invoke(
+        cli.app,
+        ["review", "--count", "1"],
+        input="apple\n4\n",
+    )
     assert review_result.exit_code == 0
-    assert "[apple]" in review_result.stdout
+    assert "Phonetic: /test/" in review_result.stdout
+    assert "Saved review for apple: final score=4" in review_result.stdout
 
     delete_result = runner.invoke(cli.app, ["delete", "apple"])
     assert delete_result.exit_code == 0
@@ -143,6 +154,14 @@ def test_audio_can_be_disabled_with_env(tmp_path: Path, monkeypatch) -> None:
     assert speak_result.exit_code == 1
     assert "Audio is disabled." in speak_result.stdout
 
+    review_result = runner.invoke(
+        cli.app,
+        ["review", "--count", "1"],
+        input="apple\n4\n",
+    )
+    assert review_result.exit_code == 0
+    assert "Audio is disabled. Running IPA-only dictation prompts." in review_result.stdout
+
 
 def test_show_speaks_only_with_flag(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "show-speak.db"
@@ -199,9 +218,35 @@ def test_short_option_aliases_work(tmp_path: Path, monkeypatch) -> None:
     assert refresh_result.exit_code == 0
     assert "Updated word from DeepSeek: apple" in refresh_result.stdout
 
-    review_result = runner.invoke(cli.app, ["review", "-c", "1"])
+    review_result = runner.invoke(
+        cli.app,
+        ["review", "-c", "1"],
+        input="apple\n4\n",
+    )
     assert review_result.exit_code == 0
-    assert "[apple]" in review_result.stdout
+    assert "Saved review for apple: final score=4" in review_result.stdout
+
+
+def test_word_review_wrong_spelling_one_retry(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "word-review-retry.db"
+    monkeypatch.setenv("WORD_VAULT_DB_PATH", str(db_path))
+    fake_client = FakeClient()
+    monkeypatch.setattr(cli, "get_deepseek_client", lambda settings: fake_client)
+
+    runner = CliRunner()
+    assert runner.invoke(cli.app, ["add", "apple"]).exit_code == 0
+
+    # Wrong first and second spelling attempts should force a low final quality.
+    result = runner.invoke(
+        cli.app,
+        ["review", "--count", "1"],
+        input="aple\napal\n5\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Not correct. Try once more." in result.stdout
+    assert "Spelling not correct. Correct word: apple" in result.stdout
+    assert "Saved review for apple: final score=1" in result.stdout
 
 
 def test_show_not_found(tmp_path: Path, monkeypatch) -> None:
