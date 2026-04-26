@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 from pathlib import Path
 
+import word_vault.storage as storage_module
 from word_vault.storage import WordRepository
 
 
@@ -172,6 +173,64 @@ def test_review_candidates_prioritize_due_words(tmp_path: Path) -> None:
     candidates = repo.review_candidates(count=2)
     assert len(candidates) == 2
     assert candidates[0].word == "banana"
+
+
+def test_review_candidates_order_is_randomized(tmp_path: Path) -> None:
+    repo = build_repo(tmp_path)
+
+    for word in ("apple", "banana", "grape"):
+        repo.add_or_replace_word(
+            word=word,
+            phonetic="/test/",
+            meaning=f"Meaning for {word}",
+            usage="Common noun.",
+            pattern=f"use {word}",
+            source_sentence=f"Sentence with {word}.",
+        )
+
+    # Keep all words in the same due bucket so app-layer shuffle controls ordering.
+    due_at = datetime.datetime.now(datetime.UTC).isoformat()
+    with repo._connect() as conn:
+        conn.execute("UPDATE words SET due_at = ?", (due_at,))
+        conn.commit()
+
+    orders = {
+        tuple(item.word for item in repo.review_candidates(count=3))
+        for _ in range(8)
+    }
+    assert len(orders) > 1
+
+
+def test_review_candidates_due_bucket_priority_with_app_shuffle(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = build_repo(tmp_path)
+
+    for word in ("apple", "banana", "grape", "orange"):
+        repo.add_or_replace_word(
+            word=word,
+            phonetic="/test/",
+            meaning=f"Meaning for {word}",
+            usage="Common noun.",
+            pattern=f"use {word}",
+            source_sentence=f"Sentence with {word}.",
+        )
+
+    now = datetime.datetime.now(datetime.UTC)
+    past_due = (now - datetime.timedelta(days=1)).isoformat()
+    future_due = (now + datetime.timedelta(days=10)).isoformat()
+    with repo._connect() as conn:
+        conn.execute("UPDATE words SET due_at = ? WHERE word IN (?, ?)", (past_due, "apple", "banana"))
+        conn.execute("UPDATE words SET due_at = ? WHERE word IN (?, ?)", (future_due, "grape", "orange"))
+        conn.commit()
+
+    def _sort_desc_in_place(items: list[object]) -> None:
+        items.sort(key=lambda row: row["word"], reverse=True)
+
+    monkeypatch.setattr(storage_module.random, "shuffle", _sort_desc_in_place)
+
+    candidates = repo.review_candidates(count=4)
+    assert [item.word for item in candidates] == ["banana", "apple", "orange", "grape"]
 
 
 def test_review_meaning_options_include_other_words(tmp_path: Path) -> None:

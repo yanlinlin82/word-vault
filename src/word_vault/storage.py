@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import random
 import sqlite3
 from pathlib import Path
 
@@ -359,23 +360,26 @@ class WordRepository:
     def review_candidates(self, count: int) -> list[WordEntry]:
         now = datetime.datetime.now(datetime.UTC).isoformat()
         with self._connect() as conn:
-            rows = conn.execute(
+            due_rows = conn.execute(
                 """
                 SELECT *
                 FROM words
-                ORDER BY
-                    CASE
-                        WHEN due_at IS NULL THEN 0
-                        WHEN due_at <= ? THEN 0
-                        ELSE 1
-                    END,
-                    due_at ASC,
-                    review_count ASC,
-                    updated_at ASC
-                LIMIT ?
+                WHERE due_at IS NULL OR due_at <= ?
                 """,
-                (now, count),
+                (now,),
             ).fetchall()
+            future_rows = conn.execute(
+                """
+                SELECT *
+                FROM words
+                WHERE due_at > ?
+                """,
+                (now,),
+            ).fetchall()
+
+        random.shuffle(due_rows)
+        random.shuffle(future_rows)
+        rows = [*due_rows, *future_rows][:count]
         return [self._row_to_entry(row) for row in rows]
 
     def review_meaning_options(self, word: str, option_count: int = 4) -> list[str]:
