@@ -400,7 +400,11 @@ class WordRepository:
                 (word.lower(), target.meaning, distractor_limit),
             ).fetchall()
 
-        return [target.meaning, *[row["meaning"] for row in rows]]
+        distractors = [row["meaning"] for row in rows]
+        random.shuffle(distractors)
+        options = [target.meaning, *distractors]
+        random.shuffle(options)
+        return options
 
     def mark_reviewed(self, word: str) -> None:
         self.record_review_result(word, quality=4)

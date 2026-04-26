@@ -80,10 +80,8 @@ def build_meaning_options(repo: WordRepository, item: WordEntry) -> tuple[list[s
     if not options:
         return [], -1
 
-    rotation = sum(ord(char) for char in item.word) % len(options)
-    ordered_options = options[rotation:] + options[:rotation]
-    correct_index = ordered_options.index(item.meaning)
-    return ordered_options, correct_index
+    correct_index = options.index(item.meaning)
+    return options, correct_index
 
 
 def prompt_meaning_choice(options: list[str]) -> int:

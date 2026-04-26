@@ -271,8 +271,55 @@ def test_review_meaning_options_include_other_words(tmp_path: Path) -> None:
 
     options = repo.review_meaning_options("apple", option_count=4)
 
-    assert options[0] == "A fruit."
+    assert "A fruit." in options
     assert len(options) == 4
     assert "A yellow fruit." in options
     assert "A small round fruit." in options
     assert "A citrus fruit." in options
+
+
+def test_review_meaning_options_are_shuffled_in_app_layer(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = build_repo(tmp_path)
+
+    repo.add_or_replace_word(
+        word="apple",
+        phonetic="/ˈæp.əl/",
+        meaning="M0",
+        usage="Common noun.",
+        pattern="eat an apple",
+        source_sentence="I ate an apple.",
+    )
+    repo.add_or_replace_word(
+        word="banana",
+        phonetic="/bəˈnæn.ə/",
+        meaning="M1",
+        usage="Common noun.",
+        pattern="peel a banana",
+        source_sentence="He peeled a banana.",
+    )
+    repo.add_or_replace_word(
+        word="grape",
+        phonetic="/ɡreɪp/",
+        meaning="M2",
+        usage="Common noun.",
+        pattern="eat grapes",
+        source_sentence="They ate grapes.",
+    )
+    repo.add_or_replace_word(
+        word="orange",
+        phonetic="/ˈɒr.ɪndʒ/",
+        meaning="M3",
+        usage="Common noun.",
+        pattern="peel an orange",
+        source_sentence="She peeled an orange.",
+    )
+
+    def _reverse_in_place(items: list[object]) -> None:
+        items.reverse()
+
+    monkeypatch.setattr(storage_module.random, "shuffle", _reverse_in_place)
+
+    options = repo.review_meaning_options("apple", option_count=4)
+    assert options == ["M1", "M2", "M3", "M0"]

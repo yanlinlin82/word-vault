@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
 from word_vault import cli
+from word_vault.storage import WordRepository
 
 
 class FakeClient:
@@ -276,10 +278,20 @@ def test_review_plays_sentence_audio_and_uses_meaning_distractors(
     assert runner.invoke(cli.app, ["add", "orange"]).exit_code == 0
     assert runner.invoke(cli.app, ["add", "grape"]).exit_code == 0
 
+    # Force apple to be selected for review while keeping other words available as distractors.
+    repo = WordRepository(db_path)
+    now = datetime.datetime.now(datetime.UTC)
+    past_due = (now - datetime.timedelta(days=1)).isoformat()
+    future_due = (now + datetime.timedelta(days=10)).isoformat()
+    with repo._connect() as conn:
+        conn.execute("UPDATE words SET due_at = ? WHERE word = ?", (past_due, "apple"))
+        conn.execute("UPDATE words SET due_at = ? WHERE word IN (?, ?, ?)", (future_due, "banana", "orange", "grape"))
+        conn.commit()
+
     result = runner.invoke(
         cli.app,
         ["review", "--count", "1"],
-        input="apple\nC\n\n5\n",
+        input="apple\nA\n\n5\n",
     )
 
     assert result.exit_code == 0
