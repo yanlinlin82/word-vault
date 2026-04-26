@@ -395,13 +395,15 @@ class WordRepository:
                 FROM words
                 WHERE word != ? AND meaning != ?
                 ORDER BY meaning ASC
-                LIMIT ?
                 """,
-                (word.lower(), target.meaning, distractor_limit),
+                (word.lower(), target.meaning),
             ).fetchall()
 
-        distractors = [row["meaning"] for row in rows]
-        random.shuffle(distractors)
+        distractor_pool = [row["meaning"] for row in rows]
+        if distractor_limit >= len(distractor_pool):
+            distractors = distractor_pool
+        else:
+            distractors = random.sample(distractor_pool, k=distractor_limit)
         options = [target.meaning, *distractors]
         random.shuffle(options)
         return options

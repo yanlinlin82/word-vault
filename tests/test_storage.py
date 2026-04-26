@@ -322,4 +322,44 @@ def test_review_meaning_options_are_shuffled_in_app_layer(
     monkeypatch.setattr(storage_module.random, "shuffle", _reverse_in_place)
 
     options = repo.review_meaning_options("apple", option_count=4)
-    assert options == ["M1", "M2", "M3", "M0"]
+    assert options == ["M3", "M2", "M1", "M0"]
+
+
+def test_review_meaning_options_sample_from_all_added_words(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = build_repo(tmp_path)
+
+    repo.add_or_replace_word(
+        word="apple",
+        phonetic="/ˈæp.əl/",
+        meaning="M0",
+        usage="Common noun.",
+        pattern="eat an apple",
+        source_sentence="I ate an apple.",
+    )
+    for index, word in enumerate(("banana", "grape", "orange", "peach", "melon"), start=1):
+        repo.add_or_replace_word(
+            word=word,
+            phonetic="/test/",
+            meaning=f"M{index}",
+            usage="Common noun.",
+            pattern=f"use {word}",
+            source_sentence=f"Sentence with {word}.",
+        )
+
+    captured: dict[str, list[str]] = {}
+
+    def _sample(pool: list[str], k: int) -> list[str]:
+        captured["pool"] = list(pool)
+        captured["k"] = [k]
+        return ["M5", "M4", "M3"]
+
+    monkeypatch.setattr(storage_module.random, "sample", _sample)
+    monkeypatch.setattr(storage_module.random, "shuffle", lambda items: None)
+
+    options = repo.review_meaning_options("apple", option_count=4)
+
+    assert set(captured["pool"]) == {"M1", "M2", "M3", "M4", "M5"}
+    assert captured["k"] == [3]
+    assert options == ["M0", "M5", "M4", "M3"]
